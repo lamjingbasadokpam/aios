@@ -12,11 +12,17 @@ class ResourceLimits:
     memory_bytes: int | None = None
     cpu_time_seconds: int | None = None
 
+    def __post_init__(self) -> None:
+        for name, value in (("max_processes", self.max_processes), ("memory_bytes", self.memory_bytes), ("cpu_time_seconds", self.cpu_time_seconds)):
+            if value is not None and value <= 0:
+                raise ValueError(f"{name} must be positive")
+
 
 class WindowsJobObjectAdapter:
     """Capability boundary for Windows Job Objects.
 
     Native Job Object calls are isolated here so the core can remain portable.
+    V0 tracks attachments; privileged OS enforcement belongs in this adapter.
     """
 
     def __init__(self, limits: ResourceLimits) -> None:
