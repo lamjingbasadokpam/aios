@@ -29,7 +29,7 @@ class RecoveryResolutionIntegrator:
         history = tuple(events)
         incident_status = self._incident_tracker.update(incident, history)
         alert_states = self._alert_tracker.update(history)
-        alerts_resolved = bool(alert_states) and all(not state.active for state in alert_states.values())
+        alerts_resolved = all(not state.active for state in alert_states.values())
         if incident_status.state != RecoveryIncidentState.RESOLVED:
             alerts_resolved = False
         return RecoveryResolutionResult(incident, incident_status, alerts_resolved)
