@@ -1,74 +1,44 @@
 # AIOS Tool Fabric V0
 
-## Purpose
-
-Tool Fabric is the controlled bridge between an agent and executable capabilities on the machine.
+Phase 32 establishes the provider-neutral tool execution boundary while preserving the existing ToolGateway capability enforcement.
 
 ```text
 Agent / LLM
     |
     v
+Tool Fabric
+    |
+    v
 ToolGateway
     |
     +--> capability check
-    |
     +--> tool registry
     |
     v
-Tool Handler
+Tool Adapter / Handler
     |
     v
 bounded environment
 ```
 
-## V0 components
+## Contract
 
-- `Tool`: immutable capability metadata and schema
-- `ToolContext`: execution identity and granted capabilities
-- `ToolResult`: normalized result/error envelope
-- `ToolRegistry`: discovery and handler lookup
-- `ToolGateway`: invocation and capability enforcement
+`ToolRequest` identifies a registered tool and carries structured arguments. `ToolResponse` carries success, result/error, and metadata.
 
-## Security rule
+## Design rules
 
-A model's ability to request a tool does not grant permission to execute it.
+- Tools are explicitly registered; arbitrary names cannot execute capabilities.
+- The fabric routes requests but does not replace the existing security gateway.
+- Tool adapters must remain constrained by runtime sandbox and policy layers.
+- Secrets do not belong in tool requests.
+- The same contract can back local tools or remote/cloud capabilities.
 
-The gateway compares:
+## Agentic AI boundary
 
-```text
-required_capabilities
-        vs
-context.granted_capabilities
-```
+The model may propose a tool call, but the ToolGateway remains the authorization boundary. Model output never becomes implicit operating-system authority.
 
-Missing capabilities produce a denial before the handler runs.
+The existing V0 filesystem tools remain workspace-bounded; unrestricted shell, network, browser automation, MCP transport, and automatic approvals remain deferred to later phases.
 
-## Filesystem tools
+## V0 scope
 
-V0 provides read/write text-file handlers restricted to an explicit workspace root.
-
-They cannot traverse outside that root through `..` or resolved symlinks that escape the workspace.
-
-## Why shell is not included yet
-
-A general process/shell tool is much higher risk than bounded file operations. It requires a separate Environment and Policy layer for working-directory, executable allowlists, environment variables, network access, timeouts, process tree cleanup, and OS isolation.
-
-Therefore shell execution is deferred until the Environment Fabric exists.
-
-## MCP
-
-MCP should later be implemented as a Tool adapter. It must still pass through the AIOS ToolGateway and security policy; an MCP server does not bypass AIOS permissions.
-
-## Non-goals
-
-V0 does not implement:
-
-- arbitrary shell execution
-- unrestricted filesystem access
-- network tools
-- browser automation
-- automatic approvals
-- MCP transport
-- tool planning
-
-Those belong to later phases.
+Registration, discovery, structured requests, routing, and normalized responses. Authorization continues to live in ToolGateway and policy, keeping execution and security separate.
