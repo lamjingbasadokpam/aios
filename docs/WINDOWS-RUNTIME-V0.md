@@ -1,33 +1,43 @@
-# AIOS Windows Runtime V0
+# AIOS Windows Native Runtime V0
 
-Phase 23 introduces the Windows-specific execution boundary without leaking Windows APIs into the AIOS core.
+Phase 23 completes the Windows-specific execution boundary without leaking Windows APIs into the AIOS core.
 
 ```text
-AIOS Core
-   |
-Runtime Adapter
-   |
-Windows Runtime
-   +-- capability detection
-   +-- working-directory validation
-   +-- command construction
-   +-- future process adapter
-   +-- future Named Pipe adapter
+Agent Identity
+      |
+Process Manager
+      |
+Windows Runtime Adapter
+      +-------------------+
+      |                   |
+Process Adapter      Named Pipe Adapter
+      |                   |
+Windows process      \\.\pipe\...
+      |                   |
+      +---------+---------+
+                |
+           Agent Worker
 ```
 
-## V0 boundary
+## Implemented
 
-The adapter deliberately does not spawn arbitrary processes or claim security isolation. Those operations belong to explicit process, IPC, and sandbox adapters.
+- Windows capability detection
+- working-directory validation
+- Windows-only process adapter
+- new-process-group creation for worker processes
+- graceful termination with forced-kill fallback
+- Named Pipe endpoint contract
+- Windows-only Named Pipe capability detection
+- transport details kept outside the gateway and agent layers
 
-## Production direction
+## Boundary
 
-The Windows implementation should eventually provide:
+The process adapter creates and terminates processes. The process manager owns lifecycle state. The gateway owns transport-neutral routing. The sandbox owns policy and resource contracts.
 
-- subprocess lifecycle integration with the Phase 22 process manager
-- Windows Named Pipes for local agent transport
-- Job Objects/resource controls where appropriate
-- environment and working-directory isolation
-- graceful termination and crash reporting
-- integration with the Phase 16 sandbox policy
+## Security
 
-The platform adapter should remain replaceable so Linux and macOS runtimes can implement equivalent contracts.
+Phase 23 does not claim privileged isolation. Process groups and termination are lifecycle controls, not a security sandbox. Windows Job Objects, restricted tokens, filesystem ACLs, network controls, and stronger containment remain explicit future adapters.
+
+## Cross-platform policy
+
+The AIOS core remains platform-neutral. Windows behavior lives under `aios.runtime`; Linux/macOS adapters can implement the same concepts without changing agent identity, A2A, gateway, or orchestration code.
