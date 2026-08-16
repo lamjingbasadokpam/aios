@@ -20,6 +20,12 @@ class RecoveryHandler(Protocol):
 class RetryRecoveryHandler:
     max_retries: int = 2
 
+    def __post_init__(self) -> None:
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+
     def decide(self, error: Exception, attempt: int) -> RecoveryDecision:
         del error
+        if attempt < 1:
+            raise ValueError("attempt must be positive")
         return RecoveryDecision.RETRY if attempt <= self.max_retries else RecoveryDecision.ABORT
