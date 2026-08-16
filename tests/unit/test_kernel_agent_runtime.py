@@ -54,3 +54,23 @@ def test_kernel_records_agent_runtime_failure() -> None:
         "task.started",
         "task.failed",
     ]
+
+
+def test_kernel_maps_exhausted_recovery_to_failed_task() -> None:
+    runtime = FakeAgentRuntime(RuntimeResult(False, error="retries exhausted", steps=3), [])
+    kernel = Kernel(agent_runtime=runtime)
+    kernel.start()
+    agent = kernel.register_agent(Agent(name="recovery-agent"))
+    task = kernel.create_task(Task(input="recover me", agent_id=agent.agent_id))
+
+    result = kernel.run_task(task.task_id)
+
+    assert result.status.value == "failed"
+    assert result.result == "retries exhausted"
+    assert [event.type for event in kernel.events.history()] == [
+        "kernel.started",
+        "agent.created",
+        "task.created",
+        "task.started",
+        "task.failed",
+    ]
