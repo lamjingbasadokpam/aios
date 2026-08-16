@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from aios.model import InferenceRequest, ModelRouter
+from aios.recovery import RecoveryDecision, RecoveryHandler
 from aios.tools import ToolContext, ToolGateway, ToolResult
 
 
@@ -35,11 +36,17 @@ class RuntimeResult:
 class AgentRuntime:
     """Executes one task through a bounded observe/act loop."""
 
-    def __init__(self, model_router: ModelRouter, tool_gateway: ToolGateway,
-                 config: AgentRuntimeConfig | None = None) -> None:
+    def __init__(
+        self,
+        model_router: ModelRouter,
+        tool_gateway: ToolGateway,
+        config: AgentRuntimeConfig | None = None,
+        recovery_handler: RecoveryHandler | None = None,
+    ) -> None:
         self.model_router = model_router
         self.tool_gateway = tool_gateway
         self.config = config or AgentRuntimeConfig()
+        self.recovery_handler = recovery_handler
 
     @staticmethod
     def _prompt(task: str, history: list[dict[str, Any]]) -> str:
@@ -62,57 +69,94 @@ class AgentRuntime:
             raise ValueError("Model action must be 'final' or 'tool'")
         return action
 
-    async def run(self, task: str, *, task_id: UUID | None = None,
-                  agent_id: UUID | None = None,
-                  granted_capabilities: frozenset[str] = frozenset()) -> RuntimeResult:
+    def _recover(self, exc: Exception, attempt: int) -> bool:
+        if self.recovery_handler is None:
+            return False
+        return self.recovery_handler.decide(exc, attempt) is RecoveryDecision.RETRY
+
+    async def run(
+        self,
+        task: str,
+        *,
+        task_id: UUID | None = None,
+        agent_id: UUID | None = None,
+        granted_capabilities: frozenset[str] = frozenset(),
+    ) -> RuntimeResult:
         history: list[dict[str, Any]] = []
         tool_results: list[ToolResult] = []
 
         for step in range(1, self.config.max_steps + 1):
-            request = InferenceRequest(
-                prompt=self._prompt(task, history),
-                metadata={"runtime_step": step},
-            )
-            try:
-                response = await self.model_router.generate(
-                    request,
-                    locality=self.config.locality,
-                    require=set(self.config.required_model_capabilities),
-                )
-                action = self._parse_action(response.text)
-            except Exception as exc:
-                return RuntimeResult(False, error=str(exc), steps=step - 1, tool_results=tool_results)
+            attempt = 1
+            while True:
+                try:
+                    request = InferenceRequest(
+                        prompt=self._prompt(task, history),
+                        metadata={"runtime_step": step, "recovery_attempt": attempt},
+                    )
+                    response = await self.model_router.generate(
+                        request,
+                        locality=self.config.locality,
+                        require=set(self.config.required_model_capabilities),
+                    )
+                    action = self._parse_action(response.text)
+                except Exception as exc:
+                    if self._recover(exc, attempt):
+                        attempt += 1
+                        continue
+                    return RuntimeResult(False, error=str(exc), steps=step - 1, tool_results=tool_results)
 
-            if action["action"] == "final":
-                answer = str(action.get("answer", ""))
-                return RuntimeResult(True, output=answer, steps=step, tool_results=tool_results)
+                if action["action"] == "final":
+                    answer = str(action.get("answer", ""))
+                    return RuntimeResult(True, output=answer, steps=step, tool_results=tool_results)
 
-            tool_id = action.get("tool_id")
-            arguments = action.get("arguments", {})
-            if not isinstance(tool_id, str) or not isinstance(arguments, dict):
-                return RuntimeResult(False, error="Invalid tool action", steps=step, tool_results=tool_results)
+                tool_id = action.get("tool_id")
+                arguments = action.get("arguments", {})
+                if not isinstance(tool_id, str) or not isinstance(arguments, dict):
+                    exc = ValueError("Invalid tool action")
+                    if self._recover(exc, attempt):
+                        attempt += 1
+                        continue
+                    return RuntimeResult(False, error=str(exc), steps=step, tool_results=tool_results)
 
-            try:
-                result = await self.tool_gateway.invoke(
-                    tool_id,
-                    arguments,
-                    ToolContext(
-                        task_id=task_id,
-                        agent_id=agent_id,
-                        granted_capabilities=granted_capabilities,
-                    ),
-                )
-            except Exception as exc:
-                result = ToolResult(success=False, error=str(exc), tool_id=tool_id)
+                try:
+                    result = await self.tool_gateway.invoke(
+                        tool_id,
+                        arguments,
+                        ToolContext(
+                            task_id=task_id,
+                            agent_id=agent_id,
+                            granted_capabilities=granted_capabilities,
+                        ),
+                    )
+                except Exception as exc:
+                    result = ToolResult(success=False, error=str(exc), tool_id=tool_id)
 
-            tool_results.append(result)
-            history.append({
-                "step": step,
-                "tool": tool_id,
-                "success": result.success,
-                "output": result.output,
-                "error": result.error,
-            })
+                if not result.success:
+                    exc = RuntimeError(result.error or f"Tool '{tool_id}' failed")
+                    history.append({
+                        "step": step,
+                        "attempt": attempt,
+                        "tool": tool_id,
+                        "success": False,
+                        "output": result.output,
+                        "error": result.error,
+                    })
+                    if self._recover(exc, attempt):
+                        attempt += 1
+                        continue
+                    tool_results.append(result)
+                    return RuntimeResult(False, error=result.error, steps=step, tool_results=tool_results)
+
+                tool_results.append(result)
+                history.append({
+                    "step": step,
+                    "attempt": attempt,
+                    "tool": tool_id,
+                    "success": result.success,
+                    "output": result.output,
+                    "error": result.error,
+                })
+                break
 
         return RuntimeResult(
             False,
