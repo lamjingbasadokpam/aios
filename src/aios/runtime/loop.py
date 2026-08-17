@@ -94,6 +94,7 @@ class AgentRuntime:
                 arguments = action.get("arguments", {})
                 if not isinstance(tool_id, str) or not isinstance(arguments, dict):
                     return RuntimeResult(False, error="Invalid tool action", steps=step, tool_results=tool_results)
+
                 try:
                     result = await self.tool_gateway.invoke(
                         tool_id, arguments,
@@ -102,11 +103,19 @@ class AgentRuntime:
                     )
                 except Exception as exc:
                     result = ToolResult(success=False, error=str(exc), tool_id=tool_id)
-                if not result.success:
-                    exc = RuntimeError(result.error or f"Tool '{tool_id}' failed")
                     history.append({"step": step, "attempt": attempt, "tool": tool_id,
                                     "success": False, "output": result.output, "error": result.error})
                     if self._recover(exc, attempt):
+                        attempt += 1
+                        continue
+                    tool_results.append(result)
+                    return RuntimeResult(False, error=result.error, steps=step, tool_results=tool_results)
+
+                if not result.success:
+                    history.append({"step": step, "attempt": attempt, "tool": tool_id,
+                                    "success": False, "output": result.output, "error": result.error})
+                    failure = RuntimeError(result.error or f"Tool '{tool_id}' failed")
+                    if self._recover(failure, attempt):
                         attempt += 1
                         continue
                     tool_results.append(result)
