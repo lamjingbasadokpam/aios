@@ -40,8 +40,8 @@ class MemoryGateway:
     """Policy boundary between trusted execution context and memory providers."""
 
     def __init__(self, store: MemoryStore, retriever: MemoryRetriever | None = None) -> None:
-        self.store = store
-        self.retriever = retriever or MemoryRetriever(store)
+        self._store = store
+        self._retriever = retriever or MemoryRetriever(store)
 
     @staticmethod
     def _check_scope(context: MemoryAccessContext, scope: MemoryScope) -> None:
@@ -69,13 +69,13 @@ class MemoryGateway:
         self._validate_namespace(namespace)
         owner_id = context.identity_for(scope)
         if supersedes_id is not None:
-            current = next((r for r in self.store.list(namespace) if r.memory_id == supersedes_id), None)
+            current = next((r for r in self._store.list(namespace) if r.memory_id == supersedes_id), None)
             if current is None:
                 raise KeyError(f"Unknown memory: {supersedes_id}")
             self._check_record_access(context, current)
-        return self.store.remember(content, source=source, namespace=namespace, metadata=metadata,
-                                   memory_type=memory_type, scope=scope, owner_id=owner_id,
-                                   expires_at=expires_at, supersedes_id=supersedes_id)
+        return self._store.remember(content, source=source, namespace=namespace, metadata=metadata,
+                                    memory_type=memory_type, scope=scope, owner_id=owner_id,
+                                    expires_at=expires_at, supersedes_id=supersedes_id)
 
     def recall(self, query: MemoryQuery, *, context: MemoryAccessContext) -> list:
         scope = query.scope or MemoryScope.AGENT
@@ -83,11 +83,16 @@ class MemoryGateway:
         self._validate_namespace(query.namespace)
         if query.scope is None:
             query = replace(query, scope=scope)
-        hits = self.retriever.search(query)
-        return [hit for hit in hits if hit.record.scope is MemoryScope.SYSTEM or hit.record.owner_id == context.identity_for(hit.record.scope)]
+        hits = self._retriever.search(query)
+        return [
+            hit
+            for hit in hits
+            if hit.record.scope is MemoryScope.SYSTEM
+            or hit.record.owner_id == context.identity_for(hit.record.scope)
+        ]
 
     def update(self, record: MemoryRecord, *, context: MemoryAccessContext) -> MemoryRecord:
-        existing = next((r for r in self.store.list(record.namespace) if r.memory_id == record.memory_id), None)
+        existing = next((r for r in self._store.list(record.namespace) if r.memory_id == record.memory_id), None)
         if existing is None:
             raise KeyError(f"Unknown memory: {record.memory_id}")
         self._check_record_access(context, existing)
@@ -96,19 +101,19 @@ class MemoryGateway:
         if record.memory_id != existing.memory_id:
             raise MemoryAccessDenied("Memory identity is immutable through update")
         self._validate_namespace(existing.namespace)
-        return self.store.update(record)
+        return self._store.update(record)
 
     def update_content(self, memory_id: UUID, content: str, *, context: MemoryAccessContext,
                        source: str | None = None) -> MemoryRecord:
-        current = next((r for r in self.store.list() if r.memory_id == memory_id), None)
+        current = next((r for r in self._store.list() if r.memory_id == memory_id), None)
         if current is None:
             raise KeyError(f"Unknown memory: {memory_id}")
         self._check_record_access(context, current)
-        return self.store.update_content(memory_id, content, source=source)
+        return self._store.update_content(memory_id, content, source=source)
 
     def forget(self, memory_id: UUID, *, context: MemoryAccessContext) -> bool:
-        current = next((r for r in self.store.list() if r.memory_id == memory_id), None)
+        current = next((r for r in self._store.list() if r.memory_id == memory_id), None)
         if current is None:
             return False
         self._check_record_access(context, current)
-        return self.store.forget(memory_id)
+        return self._store.forget(memory_id)
