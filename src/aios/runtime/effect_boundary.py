@@ -22,13 +22,17 @@ class EffectExecutionBoundary:
     def __init__(self, registry: EffectRegistry) -> None:
         self.registry = registry
 
-    def execute(self, intent: EffectIntent, operation: Callable[[], Any]) -> EffectExecution:
-        key = intent.key()
+    def execute(self, intent: EffectIntent | str, operation: Callable[[], Any]) -> EffectExecution:
+        key = intent if isinstance(intent, str) else intent.key()
         record = self.registry.begin(key)
         if record.status == EffectStatus.COMMITTED:
             return EffectExecution(key, False, record.result)
         if record.status == EffectStatus.FAILED:
             raise RuntimeError(f"effect {key} previously failed")
-        result = operation()
+        try:
+            result = operation()
+        except Exception as exc:
+            self.registry.fail(key, exc)
+            raise
         self.registry.commit(key, result)
         return EffectExecution(key, True, result)
