@@ -19,10 +19,13 @@ class RecoveryAlertLifecycle:
 class RecoveryAlertLifecycleTracker:
     """Tracks active/resolved alert state from ordered alert events."""
 
+    _NON_ALERT_EVENTS = frozenset({"incident_resolved"})
+
     def update(self, events: Iterable[RecoveryAlertEvent]) -> dict[tuple[str, float | int], RecoveryAlertLifecycle]:
         current: dict[tuple[str, float | int], RecoveryAlertLifecycle] = {}
         for event in events:
-            key = (event.code, event.threshold)
+            if event.code in self._NON_ALERT_EVENTS:
+                continue
             resolved = event.code.startswith("resolved:")
             code = event.code.removeprefix("resolved:") if resolved else event.code
             key = (code, event.threshold)
