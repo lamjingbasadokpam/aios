@@ -34,6 +34,15 @@ class FailingThenSuccessGateway:
         return SimpleNamespace(success=True, output="tool recovered", error=None, tool_id=tool_id)
 
 
+class PolicyFailingGateway:
+    def __init__(self):
+        self.calls = 0
+
+    async def invoke(self, tool_id, arguments, context):
+        self.calls += 1
+        raise PermissionError("workspace boundary violation")
+
+
 def test_model_failure_retries_then_succeeds():
     async def scenario():
         router = FakeRouter([RuntimeError("temporary"), '{"action":"final","answer":"ok"}'])
@@ -63,6 +72,21 @@ def test_tool_failure_retries_then_succeeds():
     assert result.success is True
     assert result.output == "done"
     assert gateway.calls == 2
+
+
+def test_policy_failure_does_not_retry():
+    async def scenario():
+        router = FakeRouter(['{"action":"tool","tool_id":"filesystem.read","arguments":{}}'])
+        gateway = PolicyFailingGateway()
+        runtime = AgentRuntime(router, gateway, recovery_handler=RetryRecoveryHandler(3))
+        result = await runtime.run("read outside workspace")
+        return result, gateway
+
+    result, gateway = asyncio.run(scenario())
+    assert result.success is False
+    assert result.error == "workspace boundary violation"
+    assert gateway.calls == 1
+    assert len(result.tool_results) == 1
 
 
 def test_recovery_exhaustion_returns_failure():
