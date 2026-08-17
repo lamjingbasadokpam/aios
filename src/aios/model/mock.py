@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from .contracts import InferenceRequest, InferenceResponse, Model, ModelCapabilities
 
 
@@ -33,15 +31,15 @@ class MockLocalProvider:
     async def generate(self, request: InferenceRequest, model: Model) -> InferenceResponse:
         answer = f"[mock-local] {self._task_from_prompt(request.prompt)}"
         return InferenceResponse(
-            text=json.dumps({"action": "final", "answer": answer}),
+            text=answer,
             model_id=model.model_id,
             provider=self.provider_id,
             request_id=request.request_id,
             finish_reason="stop",
+            metadata={"action": "final"},
         )
 
     async def stream(self, request: InferenceRequest, model: Model):
         answer = f"[mock-local] {self._task_from_prompt(request.prompt)}"
-        text = json.dumps({"action": "final", "answer": answer})
-        for token in text.split():
+        for token in answer.split():
             yield token + " "
