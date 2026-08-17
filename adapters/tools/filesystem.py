@@ -28,6 +28,9 @@ def read_tool(workspace: Path) -> tuple[Tool, object]:
     async def handler(arguments: dict, context: ToolContext) -> ToolResult:
         try:
             path = _safe_path(workspace, str(arguments["path"]))
+        except PermissionError:
+            raise
+        try:
             text = path.read_text(encoding="utf-8")
             return ToolResult(success=True, output=text, tool_id="filesystem.read")
         except Exception as exc:
@@ -48,6 +51,9 @@ def write_tool(workspace: Path) -> tuple[Tool, object]:
     async def handler(arguments: dict, context: ToolContext) -> ToolResult:
         try:
             path = _safe_path(workspace, str(arguments["path"]))
+        except PermissionError:
+            raise
+        try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(str(arguments.get("content", "")), encoding="utf-8")
             return ToolResult(success=True, output=str(path.relative_to(workspace)), tool_id="filesystem.write")
