@@ -9,28 +9,66 @@ from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class RuntimeEvent:
     type: str
-    payload: dict[str, Any] = field(default_factory=dict)
-    event_id: str = field(default_factory=lambda: str(uuid4()))
-    occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    correlation_id: str | None = None
+    payload: dict[str, Any]
+    event_id: str
+    occurred_at: datetime
+    correlation_id: str | None
+
+    def __init__(self, type: str, payload: Any = None, event_id: str | None = None,
+                 occurred_at: datetime | str | None = None, correlation_id: str | None = None,
+                 *legacy: Any, timestamp: datetime | str | None = None,
+                 source: str | None = None, run_id: str | None = None) -> None:
+        # Canonical form: RuntimeEvent(type, payload, event_id, occurred_at, correlation_id)
+        # Legacy form: RuntimeEvent(event_id, type, timestamp, source, run_id, payload)
+        if isinstance(payload, str) and legacy:
+            legacy_payload = legacy[0] if isinstance(legacy[0], dict) else {}
+            actual_event_id = type
+            actual_type = payload
+            actual_time = event_id
+            actual_source = occurred_at
+            actual_run_id = correlation_id
+            actual_correlation = None
+            actual_payload = dict(legacy_payload)
+        else:
+            actual_event_id = event_id or str(uuid4())
+            actual_type = type
+            actual_time = timestamp if timestamp is not None else occurred_at
+            actual_source = source
+            actual_run_id = run_id
+            actual_correlation = correlation_id
+            actual_payload = dict(payload or {}) if isinstance(payload, dict) else {}
+
+        if isinstance(actual_time, str):
+            actual_time = datetime.fromisoformat(actual_time.replace("Z", "+00:00"))
+        if actual_time is None:
+            actual_time = datetime.now(timezone.utc)
+        if actual_time.tzinfo is None:
+            actual_time = actual_time.replace(tzinfo=timezone.utc)
+        if actual_source is not None:
+            actual_payload.setdefault("_source", str(actual_source))
+        if actual_run_id is not None:
+            actual_payload.setdefault("_run_id", str(actual_run_id))
+
+        object.__setattr__(self, "type", str(actual_type))
+        object.__setattr__(self, "payload", actual_payload)
+        object.__setattr__(self, "event_id", str(actual_event_id))
+        object.__setattr__(self, "occurred_at", actual_time)
+        object.__setattr__(self, "correlation_id", actual_correlation)
 
     @property
     def timestamp(self) -> datetime:
-        """Backward-compatible timestamp alias for occurred_at."""
         return self.occurred_at
 
     @property
     def source(self) -> str | None:
-        """Compatibility view of the legacy source field."""
         value = self.payload.get("_source")
         return str(value) if value is not None else None
 
     @property
     def run_id(self) -> str | None:
-        """Compatibility view of the legacy run_id field."""
         value = self.payload.get("_run_id")
         return str(value) if value is not None else None
 
