@@ -65,6 +65,15 @@ class EffectLeaseStore:
             self._leases[key] = lease
             return lease
 
+    def fail(self, key: str, owner: str, result: Any = None) -> EffectLease:
+        with self._lock:
+            current = self._leases.get(key)
+            if current is None or current.owner != owner:
+                raise RuntimeError("lease is not owned by caller")
+            lease = EffectLease(key, owner, current.expires_at, LeaseStatus.FAILED, result)
+            self._leases[key] = lease
+            return lease
+
     def expire(self, key: str) -> EffectLease | None:
         with self._lock:
             current = self._leases.get(key)
