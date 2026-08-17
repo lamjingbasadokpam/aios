@@ -3,8 +3,28 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 
 from aios.kernel import Agent, Kernel, Task
+from aios.model import ModelRegistry, ModelRouter
+from aios.model.mock import MockLocalProvider
+from aios.recovery import RetryRecoveryHandler
+from aios.runtime import AgentRuntime
+from aios.tools import ToolGateway, ToolRegistry
+
+
+def build_runtime() -> AgentRuntime:
+    models = ModelRegistry()
+    models.register_provider(MockLocalProvider())
+    return AgentRuntime(
+        ModelRouter(models),
+        ToolGateway(ToolRegistry()),
+        recovery_handler=RetryRecoveryHandler(1),
+    )
+
+
+def build_kernel() -> Kernel:
+    return Kernel(agent_runtime=build_runtime())
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     agent = sub.add_parser("agent-create", help="Register an agent")
     agent.add_argument("name")
 
-    task = sub.add_parser("task-create", help="Create and accept a task")
+    task = sub.add_parser("task-create", help="Create and execute a task")
     task.add_argument("input")
 
     return parser
@@ -29,7 +49,7 @@ def main() -> int:
     args = parser.parse_args()
 
     # V0 is intentionally process-local. Persistent daemon state comes later.
-    kernel = Kernel()
+    kernel = build_kernel()
     kernel.start()
 
     if args.command == "start":
@@ -43,7 +63,11 @@ def main() -> int:
         print(f"Agent created: {agent.name} ({agent.agent_id})")
     elif args.command == "task-create":
         task = kernel.create_task(Task(input=args.input))
-        print(f"Task created: {task.task_id}")
+        task = asyncio.run(kernel.run_task_async(task.task_id))
+        if task.status.value == "failed":
+            print(f"Task failed: {task.result}")
+            return 1
+        print(f"Task completed: {task.result}")
     return 0
 
 
