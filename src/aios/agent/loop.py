@@ -1,6 +1,10 @@
-"""Framework-neutral agent decision and tool-calling loop."""
+"""LEGACY: superseded by :mod:`aios.runtime.loop`."""
 
 from __future__ import annotations
+
+# This module is intentionally preserved for historical compatibility.
+# New execution code MUST use AgentRuntime -> ModelRouter -> ToolGateway.
+# Do not add new functionality here.
 
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -23,7 +27,7 @@ class ToolCallParser(Protocol):
 
 
 class AgentLoop:
-    """Runs model -> tool -> observation cycles without owning provider SDKs."""
+    """Legacy execution loop; retained for compatibility only."""
 
     def __init__(self, model: ModelGateway, tools: ToolFabric, parser: ToolCallParser) -> None:
         self.model = model
