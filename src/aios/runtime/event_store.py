@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Protocol
 
 from .events import RuntimeEvent
@@ -31,7 +31,9 @@ class InMemoryEventStore:
 
     async def replay(self, handler, *, correlation_id: str | None = None, event_type: str | None = None) -> None:
         for event in await self.list(correlation_id=correlation_id, event_type=event_type):
-            await handler(event)
+            result = handler(event)
+            if inspect.isawaitable(result):
+                await result
 
 
 class DurableEventStoreUnavailable(RuntimeError):
