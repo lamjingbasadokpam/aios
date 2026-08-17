@@ -21,11 +21,7 @@ class MemoryStore:
 
     def list(self, namespace: str = "default") -> list[MemoryRecord]:
         now = datetime.now(timezone.utc)
-        return [
-            record
-            for record in self._records
-            if record.namespace == namespace and not record.is_expired(now=now)
-        ]
+        return [record for record in self._records if record.namespace == namespace and not record.is_expired(now=now)]
 
     def query_candidates(self, query: MemoryQuery) -> list[MemoryRecord]:
         records = self.list(query.namespace)
@@ -34,11 +30,7 @@ class MemoryStore:
         if query.scope is not None:
             records = [r for r in records if r.scope == query.scope]
         if query.metadata_filter:
-            records = [
-                r
-                for r in records
-                if all(r.metadata.get(k) == value for k, value in query.metadata_filter.items())
-            ]
+            records = [r for r in records if all(r.metadata.get(k) == value for k, value in query.metadata_filter.items())]
         return records
 
     def remember(
@@ -50,10 +42,10 @@ class MemoryStore:
         metadata: dict | None = None,
         memory_type: MemoryType = MemoryType.SEMANTIC,
         scope: MemoryScope = MemoryScope.AGENT,
+        owner_id: UUID | None = None,
         expires_at: datetime | None = None,
         supersedes_id: UUID | None = None,
     ) -> MemoryRecord:
-        """Create and store a memory record."""
         record = MemoryRecord(
             content=content,
             source=source,
@@ -61,13 +53,13 @@ class MemoryStore:
             metadata=metadata or {},
             memory_type=memory_type,
             scope=scope,
+            owner_id=owner_id,
             expires_at=expires_at,
             supersedes_id=supersedes_id,
         )
         return self.add(record)
 
     def update(self, record: MemoryRecord) -> MemoryRecord:
-        """Replace an existing record while preserving its identity."""
         for index, current in enumerate(self._records):
             if current.memory_id == record.memory_id:
                 self._records[index] = record
@@ -75,14 +67,12 @@ class MemoryStore:
         raise KeyError(f"Unknown memory: {record.memory_id}")
 
     def update_content(self, memory_id: UUID, content: str, *, source: str | None = None) -> MemoryRecord:
-        """Create a revised record in place while preserving its memory identity."""
         current = next((r for r in self._records if r.memory_id == memory_id), None)
         if current is None:
             raise KeyError(f"Unknown memory: {memory_id}")
         return self.update(replace(current, content=content, source=source or current.source))
 
     def forget(self, memory_id: UUID) -> bool:
-        """Delete a memory record and report whether it existed."""
         for index, record in enumerate(self._records):
             if record.memory_id == memory_id:
                 del self._records[index]
@@ -90,18 +80,9 @@ class MemoryStore:
         return False
 
     def search_text(self, query: str, *, namespace: str = "default", limit: int = 5) -> list[MemoryRecord]:
-        """Simple lexical retrieval used only as a V1 fallback before semantic retrieval."""
         if limit <= 0:
             return []
         terms = {term.lower() for term in query.split() if term.strip()}
         candidates = self.list(namespace)
-        ranked = sorted(
-            candidates,
-            key=lambda record: sum(term in record.content.lower() for term in terms),
-            reverse=True,
-        )
-        return [
-            record
-            for record in ranked
-            if not terms or any(term in record.content.lower() for term in terms)
-        ][:limit]
+        ranked = sorted(candidates, key=lambda record: sum(term in record.content.lower() for term in terms), reverse=True)
+        return [record for record in ranked if not terms or any(term in record.content.lower() for term in terms)][:limit]

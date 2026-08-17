@@ -12,6 +12,9 @@ from aios.memory import (
     RagPipeline,
 )
 
+from uuid import uuid4
+
+from aios.memory import MemoryAccessContext, MemoryGateway
 
 def test_memory_retrieval_and_namespace_filtering() -> None:
     store = MemoryStore()
@@ -26,10 +29,22 @@ def test_memory_retrieval_and_namespace_filtering() -> None:
     assert hits[0].score > 0
 
 
-def test_rag_pipeline_assembles_context() -> None:
+def test_rag_pipeline_assembles_context_through_gateway() -> None:
     store = MemoryStore()
-    store.add(MemoryRecord(content="Tool execution passes through policy", source="docs"))
-    context = RagPipeline(MemoryRetriever(store)).augment("How does tool execution work?")
+    gateway = MemoryGateway(store)
+    access = MemoryAccessContext(agent_id=uuid4())
+
+    gateway.remember(
+        "Tool execution passes through policy",
+        source="docs",
+        context=access,
+    )
+
+    context = RagPipeline(gateway).augment(
+        "How does tool execution work?",
+        access,
+    )
+
     assert "Relevant memory:" in context
     assert "Tool execution passes through policy" in context
 

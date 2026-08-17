@@ -38,6 +38,7 @@ class MemoryRecord:
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     memory_type: MemoryType = MemoryType.SEMANTIC
     scope: MemoryScope = MemoryScope.AGENT
+    owner_id: UUID | None = None
     expires_at: datetime | None = None
     supersedes_id: UUID | None = None
 
