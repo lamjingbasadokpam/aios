@@ -1,9 +1,4 @@
-"""Small, provider-independent agent execution loop.
-
-V0 intentionally uses a structured action protocol instead of parsing arbitrary
-natural-language tool calls. A model adapter can later map native tool calls
-into these actions without changing the runtime.
-"""
+"""Small, provider-independent agent execution loop."""
 
 from __future__ import annotations
 
@@ -14,6 +9,7 @@ from uuid import UUID
 
 from aios.model import InferenceRequest, ModelRouter
 from aios.recovery import RecoveryDecision, RecoveryHandler
+from aios.recovery.classification import RecoveryClass, classify_failure
 from aios.tools import ToolContext, ToolGateway, ToolResult
 
 
@@ -71,6 +67,8 @@ class AgentRuntime:
 
     def _recover(self, exc: Exception, attempt: int) -> bool:
         if self.recovery_handler is None:
+            return False
+        if classify_failure(exc) is not RecoveryClass.TRANSIENT:
             return False
         return self.recovery_handler.decide(exc, attempt) is RecoveryDecision.RETRY
 
