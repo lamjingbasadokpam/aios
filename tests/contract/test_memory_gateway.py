@@ -115,3 +115,10 @@ def test_gateway_rejects_invalid_namespace() -> None:
 
     with pytest.raises(ValueError):
         gateway.remember("fact", source="test", namespace=" bad", context=context)
+
+
+def test_gateway_does_not_expose_raw_memory_dependencies() -> None:
+    gateway = MemoryGateway(MemoryStore())
+
+    assert not hasattr(gateway, "store")
+    assert not hasattr(gateway, "retriever")
