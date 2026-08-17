@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from aios.memory.context import ContextEngine, ContextPack
 from aios.memory.contracts import MemoryQuery
-from aios.memory.hybrid import HybridRetriever
+from aios.memory.gateway import MemoryAccessContext, MemoryGateway
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,22 +17,26 @@ class AgentContext:
 
 
 class AgentContextBuilder:
-    """Builds bounded model context from conversation state and retrieved memory."""
+    """Build bounded model context through the governed memory boundary."""
 
-    def __init__(self, retriever: HybridRetriever, context_engine: ContextEngine) -> None:
-        self.retriever = retriever
+    def __init__(self, gateway: MemoryGateway, context_engine: ContextEngine) -> None:
+        self.gateway = gateway
         self.context_engine = context_engine
 
-    async def build(
+    def build(
         self,
         *,
         query: str,
         messages: list[dict[str, Any]],
+        access: MemoryAccessContext,
         namespace: str = "default",
         top_k: int = 8,
     ) -> AgentContext:
-        result = await self.retriever.retrieve(MemoryQuery(query, namespace=namespace, top_k=top_k))
-        return AgentContext(tuple(messages), self.context_engine.pack(list(result.hits)))
+        hits = self.gateway.recall(
+            MemoryQuery(query, namespace=namespace, top_k=top_k),
+            context=access,
+        )
+        return AgentContext(tuple(messages), self.context_engine.pack(hits))
 
     def as_system_context(self, context: AgentContext) -> str:
         if not context.memory.items:
