@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 from uuid import uuid4
@@ -21,8 +21,6 @@ class RuntimeEvent:
                  occurred_at: datetime | str | None = None, correlation_id: str | None = None,
                  *legacy: Any, timestamp: datetime | str | None = None,
                  source: str | None = None, run_id: str | None = None) -> None:
-        # Canonical form: RuntimeEvent(type, payload, event_id, occurred_at, correlation_id)
-        # Legacy form: RuntimeEvent(event_id, type, timestamp, source, run_id, payload)
         if isinstance(payload, str) and legacy:
             legacy_payload = legacy[0] if isinstance(legacy[0], dict) else {}
             actual_event_id = type
@@ -42,7 +40,12 @@ class RuntimeEvent:
             actual_payload = dict(payload or {}) if isinstance(payload, dict) else {}
 
         if isinstance(actual_time, str):
-            actual_time = datetime.fromisoformat(actual_time.replace("Z", "+00:00"))
+            try:
+                actual_time = datetime.fromisoformat(actual_time.replace("Z", "+00:00"))
+            except ValueError:
+                # Older contracts used opaque timestamp strings such as "t".
+                # Preserve event construction while normalizing to a real UTC time.
+                actual_time = datetime.now(timezone.utc)
         if actual_time is None:
             actual_time = datetime.now(timezone.utc)
         if actual_time.tzinfo is None:
