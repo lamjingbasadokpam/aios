@@ -17,6 +17,23 @@ class RuntimeEvent:
     occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     correlation_id: str | None = None
 
+    @property
+    def timestamp(self) -> datetime:
+        """Backward-compatible timestamp alias for occurred_at."""
+        return self.occurred_at
+
+    @property
+    def source(self) -> str | None:
+        """Compatibility view of the legacy source field."""
+        value = self.payload.get("_source")
+        return str(value) if value is not None else None
+
+    @property
+    def run_id(self) -> str | None:
+        """Compatibility view of the legacy run_id field."""
+        value = self.payload.get("_run_id")
+        return str(value) if value is not None else None
+
 
 EventHandler = Callable[[RuntimeEvent], Awaitable[None]]
 
