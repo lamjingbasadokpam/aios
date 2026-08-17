@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from aios.model.contracts import InferenceRequest, InferenceResponse, Model, ModelCapabilities
 
 
@@ -20,9 +22,18 @@ class MockLocalProvider:
             )
         ]
 
+    @staticmethod
+    def _task_from_prompt(prompt: str) -> str:
+        marker = "TASK:\n"
+        if marker not in prompt:
+            return prompt
+        task = prompt.split(marker, 1)[1]
+        return task.split("\n\nHISTORY:", 1)[0]
+
     async def generate(self, request: InferenceRequest, model: Model) -> InferenceResponse:
+        answer = f"[mock-local] {self._task_from_prompt(request.prompt)}"
         return InferenceResponse(
-            text=f"[mock-local] {request.prompt}",
+            text=json.dumps({"action": "final", "answer": answer}),
             model_id=model.model_id,
             provider=self.provider_id,
             request_id=request.request_id,
@@ -30,6 +41,7 @@ class MockLocalProvider:
         )
 
     async def stream(self, request: InferenceRequest, model: Model):
-        text = f"[mock-local] {request.prompt}"
+        answer = f"[mock-local] {self._task_from_prompt(request.prompt)}"
+        text = json.dumps({"action": "final", "answer": answer})
         for token in text.split():
             yield token + " "
