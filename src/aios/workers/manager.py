@@ -31,7 +31,7 @@ class WorkerManager:
 
     async def start(self, worker_id) -> WorkerState:
         state = self._workers[worker_id]
-        if state.status not in {WorkerStatus.CREATED, WorkerStatus.STOPPED}:
+        if state.status not in {WorkerStatus.CREATED, WorkerStatus.STOPPED, WorkerStatus.FAILED}:
             raise RuntimeError(f"Worker cannot start from state {state.status}")
         state.status = WorkerStatus.STARTING
         state.started_at = datetime.now(timezone.utc)
