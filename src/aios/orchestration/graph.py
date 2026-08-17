@@ -5,6 +5,11 @@ from __future__ import annotations
 from .contracts import OrchestrationTask
 
 
+# Compatibility alias for the public name used by the orchestration package.
+# The graph stores OrchestrationTask instances; TaskNode is the historical name.
+TaskNode = OrchestrationTask
+
+
 class TaskGraph:
     def __init__(self) -> None:
         self._tasks: dict = {}
