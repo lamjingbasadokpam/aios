@@ -31,7 +31,8 @@ class PolicyEngine:
         if tool.tool_id in self.policy.denied_tools:
             return PolicyDecision(False, "Tool explicitly denied by policy")
 
-        missing = tool.required_capabilities - self.policy.allowed_capabilities
+        granted = self.policy.allowed_capabilities | environment.capabilities
+        missing = tool.required_capabilities - granted
         if missing:
             return PolicyDecision(
                 False,
