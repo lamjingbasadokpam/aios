@@ -13,10 +13,10 @@ class RecoveryClass(StrEnum):
 
 def classify_failure(error: Exception) -> RecoveryClass:
     """Classify a runtime failure without coupling recovery to tool implementations."""
-    if isinstance(error, (TimeoutError, ConnectionError, OSError)):
-        return RecoveryClass.TRANSIENT
     if isinstance(error, PermissionError):
         return RecoveryClass.POLICY
+    if isinstance(error, (TimeoutError, ConnectionError, OSError)):
+        return RecoveryClass.TRANSIENT
     if isinstance(error, (ValueError, TypeError, KeyError, AttributeError, NotImplementedError)):
         return RecoveryClass.TERMINAL
     return RecoveryClass.TRANSIENT
