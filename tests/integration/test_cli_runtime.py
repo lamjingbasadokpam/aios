@@ -9,9 +9,10 @@ def test_cli_kernel_factory_executes_task_through_runtime() -> None:
         kernel = build_kernel()
         kernel.start()
         task = kernel.create_task(Task(input="Say hello"))
-        return await kernel.run_task_async(task.task_id)
+        task = await kernel.run_task_async(task.task_id)
+        return task, kernel
 
-    task = asyncio.run(scenario())
+    task, kernel = asyncio.run(scenario())
 
     assert task.status.value == "completed"
     assert task.result == "[mock-local] Say hello"
